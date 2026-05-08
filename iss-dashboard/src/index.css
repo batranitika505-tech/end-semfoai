@@ -1,0 +1,54 @@
+@import 'leaflet/dist/leaflet.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-color: #F7F5F0;
+  --text-color: #1a1a1a;
+}
+
+.dark {
+  --bg-color: #0e0e0e;
+  --text-color: #f0f0f0;
+}
+
+@layer base {
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    @apply antialiased;
+  }
+
+  * {
+    @apply transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 rounded-[2rem] shadow-sm hover:shadow-2xl hover:border-blue-500/20 transition-all duration-500;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-300 dark:bg-zinc-800 rounded-full hover:bg-blue-500/50 transition-colors;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 450px;
+  border-radius: 2rem;
+  @apply border-none shadow-inner;
+}
