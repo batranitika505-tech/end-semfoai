@@ -1,50 +1,66 @@
-const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || import.meta.env.VITE_AI_TOKEN;
-const MODEL_ID = 'mistralai/Mistral-7B-Instruct-v0.2';
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL_ID = 'llama-3.3-70b-versatile';
 
-export const askMissionAI = async (userMessage, context, chatHistory) => {
-  if (!HF_TOKEN) {
-    throw new Error('Mission Assistant Link Offline: HF Token Missing');
+export const askMissionAI = async (userMessage, context = {}, chatHistory = []) => {
+  if (!GROQ_API_KEY) {
+    throw new Error('Mission Assistant Link Offline: Groq API Key Missing');
   }
 
-  // Construct context string as requested
-  const contextData = `
-    ISS Position: Lat ${context.location?.lat.toFixed(4)}, Lng ${context.location?.lng.toFixed(4)}
-    Current Velocity: ${context.speed.toFixed(2)} km/h
-    Altitude: ${context.location?.altitude?.toFixed(2) || '420'} km
-    Astronauts in Space: ${context.astronauts?.map(a => a.name).join(', ')}
-    Latest News: ${context.news?.slice(0, 3).map(n => n.title).join(' | ')}
-  `;
+  // Robust context string construction
+  const lat = context.location?.lat?.toFixed(4) || 'N/A';
+  const lng = context.location?.lng?.toFixed(4) || 'N/A';
+  const speed = context.speed?.toFixed(2) || '27600';
+  const altitude = context.location?.altitude?.toFixed(2) || '420';
+  const crew = context.astronauts?.map(a => a.name).join(', ') || 'Unknown';
+  const newsHeadlines = context.news?.slice(0, 5).map(n => n.title).join(' | ') || 'No news available';
+
+  const systemPrompt = `You are a professional Mission Control Assistant for the ISS Dashboard.
+    Use the following real-time telemetry and intelligence data to answer the user's question accurately.
+    Keep responses concise and mission-oriented.
+
+    CURRENT ISS TELEMETRY:
+    - Position: Latitude ${lat}, Longitude ${lng}
+    - Orbital Velocity: ${speed} km/h
+    - Altitude: ${altitude} km
+    - Crew Onboard: ${crew}
+    
+    LATEST ORBITAL INTELLIGENCE:
+    ${newsHeadlines}
+
+    If the question is about data not provided above, state that you only have access to current dashboard data.`;
 
   try {
-    const response = await fetch(
-      `https://api-inference.huggingface.co/models/${MODEL_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputs: `<s>[INST] You are a dashboard assistant. Only answer using this data: ${contextData} 
-          User question: ${userMessage} [/INST]`,
-          parameters: { max_new_tokens: 300, temperature: 0.7 }
-        }),
-      }
-    );
+    const response = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL_ID,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...chatHistory.slice(-5).map(m => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.content
+          })),
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.5,
+        max_tokens: 500,
+      }),
+    });
 
-    if (!response.ok) throw new Error('Satellite Link Interrupted');
-
-    const result = await response.json();
-    
-    // Clean up response: Mistral sometimes includes the prompt
-    let reply = Array.isArray(result) ? result[0].generated_text : result.generated_text;
-    if (reply.includes('[/INST]')) {
-      reply = reply.split('[/INST]').pop().trim();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || 'Satellite Link Interrupted');
     }
-    
-    return reply || "I only know dashboard data.";
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "Mission Control signal weak. Please retry.";
   } catch (error) {
-    console.error('AI Error:', error);
-    throw new Error('Failed to reach Mission Control AI');
+    console.error('Groq AI Error:', error);
+    throw new Error(error.message || 'Failed to reach Mission Control AI via Groq');
   }
 };

@@ -1,9 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, Check, Copy } from 'lucide-react';
 
 const ChatMessage = ({ message }) => {
+  const [copied, setCopied] = React.useState(false);
   const isUser = message.role === 'user';
+  const isBot = message.role === 'bot';
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <motion.div
@@ -22,6 +30,15 @@ const ChatMessage = ({ message }) => {
           : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-100 dark:border-zinc-700 rounded-tl-none'
       }`}>
         {message.content}
+        {isBot && (
+          <button 
+            onClick={copyToClipboard}
+            className="mt-2 flex items-center gap-1 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+          >
+            {copied ? <Check size={10} /> : <Copy size={10} />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        )}
       </div>
     </motion.div>
   );

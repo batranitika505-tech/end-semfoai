@@ -29,7 +29,7 @@ const Dashboard = () => {
     speed, 
     astronauts, 
     news: articles 
-  }), [location?.lat, location?.lng, speed, astronauts.length, articles.length]);
+  }), [location?.lat, location?.lng, location?.altitude, speed, astronauts.length, articles.length]);
 
   return (
     <div className="min-h-screen bg-[#F7F5F0] dark:bg-[#0e0e0e] transition-colors duration-300">
