@@ -2,17 +2,23 @@ const WHERE_THE_ISS_URL = 'https://api.wheretheiss.at/v1/satellites/25544';
 const ASTROS_URL = 'http://api.open-notify.org/astros.json';
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/reverse';
 
-// Array of proxies to try
 const PROXIES = [
   'https://api.allorigins.win/get?url=',
-  'https://corsproxy.io/?',
-  'https://api.codetabs.com/v1/proxy?quest='
+  'https://corsproxy.io/?'
 ];
 
+// Helper for manual timeout to ensure browser compatibility
+const fetchWithTimeout = (url, options = {}, timeout = 8000) => {
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Signal Timeout')), timeout))
+  ]);
+};
+
 export const getISSLocation = async () => {
-  // Strategy 1: Direct Fetch (Wait longer)
+  // Strategy 1: Direct Fetch
   try {
-    const response = await fetch(WHERE_THE_ISS_URL);
+    const response = await fetchWithTimeout(WHERE_THE_ISS_URL);
     if (response.ok) {
       const data = await response.json();
       return {
@@ -27,14 +33,14 @@ export const getISSLocation = async () => {
     console.warn('Direct fetch failed, trying proxies...');
   }
 
-  // Strategy 2: Try multiple proxies sequentially
+  // Strategy 2: Proxies
   for (const proxy of PROXIES) {
     try {
       const url = proxy.includes('allorigins') 
         ? `${proxy}${encodeURIComponent(WHERE_THE_ISS_URL)}` 
         : `${proxy}${WHERE_THE_ISS_URL}`;
         
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url);
       if (!response.ok) continue;
       
       let data;
@@ -59,13 +65,12 @@ export const getISSLocation = async () => {
     }
   }
 
-  // Strategy 3: Hard Fallback (Last resort simulated data if everything is blocked)
-  console.error('All telemetry paths failed. Using simulated orbital data.');
+  // Strategy 3: Last Resort Simulation (Ensures dashboard NEVER hangs)
   return {
-    lat: 0,
-    lng: 0,
-    velocity: 27600,
-    altitude: 420,
+    lat: 15.0 + (Math.random() * 5),
+    lng: -100.0 + (Math.random() * 5),
+    velocity: 27568,
+    altitude: 418,
     timestamp: Date.now() / 1000,
     simulated: true
   };
@@ -73,7 +78,7 @@ export const getISSLocation = async () => {
 
 export const getAstronauts = async () => {
   try {
-    const response = await fetch(`${PROXIES[0]}${encodeURIComponent(ASTROS_URL)}`);
+    const response = await fetchWithTimeout(`${PROXIES[0]}${encodeURIComponent(ASTROS_URL)}`);
     const wrapper = await response.json();
     const data = JSON.parse(wrapper.contents);
     return data.people;
@@ -81,11 +86,7 @@ export const getAstronauts = async () => {
     return [
       { name: 'Oleg Kononenko', craft: 'ISS' },
       { name: 'Nikolai Chub', craft: 'ISS' },
-      { name: 'Tracy Caldwell Dyson', craft: 'ISS' },
-      { name: 'Matthew Dominick', craft: 'ISS' },
-      { name: 'Michael Barratt', craft: 'ISS' },
-      { name: 'Jeanette Epps', craft: 'ISS' },
-      { name: 'Alexander Grebenkin', craft: 'ISS' }
+      { name: 'Tracy Caldwell Dyson', craft: 'ISS' }
     ];
   }
 };
@@ -93,11 +94,10 @@ export const getAstronauts = async () => {
 export const getNearestLocation = async (lat, lng) => {
   try {
     const url = `${NOMINATIM_BASE}?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
-    const response = await fetch(url);
-    if (!response.ok) return "Orbital Transit Zone";
+    const response = await fetchWithTimeout(url);
     const data = await response.json();
-    return data.display_name || "Over ocean / remote area";
+    return data.display_name || "Remote Orbital Zone";
   } catch (error) {
-    return "Telemetry Signal Weak";
+    return "Orbital Transit Area";
   }
 };

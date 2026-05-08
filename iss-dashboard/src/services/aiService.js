@@ -2,6 +2,13 @@ const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || import.meta.env.VITE_AI_TOKEN;
 const MODEL_ID = 'mistralai/Mistral-7B-Instruct-v0.2';
 const CORS_PROXY = 'https://api.allorigins.win/get?url=';
 
+const fetchWithTimeout = (url, options = {}, timeout = 12000) => {
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Signal Timeout')), timeout))
+  ]);
+};
+
 export const askMissionAI = async (userMessage, context = {}, chatHistory = []) => {
   if (!HF_TOKEN) {
     throw new Error('Mission Assistant Link Offline: Token Missing');
@@ -27,7 +34,7 @@ export const askMissionAI = async (userMessage, context = {}, chatHistory = []) 
   try {
     // Strategy 1: Direct Fetch
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${HF_TOKEN}`,
@@ -45,9 +52,9 @@ export const askMissionAI = async (userMessage, context = {}, chatHistory = []) 
       console.warn('Direct AI fetch failed, trying proxy...', e);
     }
 
-    // Strategy 2: Proxy Fetch (Note: POST via proxy is tricky, so we use it as a fallback)
+    // Strategy 2: Proxy Fallback
     const proxyUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl, {
+    const response = await fetchWithTimeout(proxyUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${HF_TOKEN}`,
