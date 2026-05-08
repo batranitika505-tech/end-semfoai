@@ -1,5 +1,6 @@
-const HF_TOKEN = import.meta.env.VITE_HF_TOKEN || import.meta.env.VITE_AI_TOKEN;
-const MODEL_ID = 'mistralai/Mistral-7B-Instruct-v0.2';
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL_ID = 'llama-3.3-70b-versatile';
 const VERCEL_PROXY = '/api/proxy?url=';
 
 const fetchWithTimeout = (url, options = {}, timeout = 15000) => {
@@ -10,37 +11,41 @@ const fetchWithTimeout = (url, options = {}, timeout = 15000) => {
 };
 
 export const askMissionAI = async (userMessage, context = {}, chatHistory = []) => {
-  if (!HF_TOKEN) throw new Error('Mission Assistant Link Offline: Token Missing');
+  if (!GROQ_API_KEY) throw new Error('Mission Assistant Link Offline: Groq Key Missing');
 
+  // Robust context construction
   const lat = context.location?.lat?.toFixed(4) || 'N/A';
   const lng = context.location?.lng?.toFixed(4) || 'N/A';
   const speed = context.speed?.toFixed(2) || '27600';
+  const altitude = context.location?.altitude?.toFixed(2) || '420';
   const crew = context.astronauts?.map(a => a.name).join(', ') || 'Unknown';
-  
-  const prompt = `<s>[INST] You are a professional Mission Control Assistant. Data: Pos: ${lat}, ${lng} | Spd: ${speed}km/h | Crew: ${crew}. User: ${userMessage} [/INST]`;
-  const payload = { inputs: prompt, parameters: { max_new_tokens: 250, temperature: 0.7, return_full_text: false } };
-  const hfUrl = `https://api-inference.huggingface.co/models/${MODEL_ID}`;
+  const news = context.news?.slice(0, 3).map(n => n.title).join(' | ') || 'No news';
+
+  const systemPrompt = `You are a professional Mission Control Assistant for the ISS Dashboard.
+    Use this telemetry data: Pos: ${lat}, ${lng} | Spd: ${speed}km/h | Alt: ${altitude}km | Crew: ${crew} | News: ${news}.
+    Answer concise and professional mission reports. If data is unavailable, state you are checking telemetry.`;
+
+  const payload = {
+    model: MODEL_ID,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...chatHistory.slice(-3).map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      })),
+      { role: 'user', content: userMessage }
+    ],
+    temperature: 0.5,
+    max_tokens: 500,
+  };
 
   try {
-    // Strategy 1: Direct Fetch
-    try {
-      const response = await fetchWithTimeout(hfUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (response.ok) return parseResponse(await response.json());
-      if (response.status === 503) throw new Error('Warming up...');
-    } catch (e) {
-      console.warn('Direct AI fetch failed, trying Vercel Proxy...');
-    }
-
-    // Strategy 2: Vercel Serverless Proxy
-    const proxyUrl = `${VERCEL_PROXY}${encodeURIComponent(hfUrl)}`;
+    // Strategy: Route via our custom Vercel Proxy to bypass Groq's browser CORS blocks
+    const proxyUrl = `${VERCEL_PROXY}${encodeURIComponent(GROQ_URL)}`;
     const response = await fetchWithTimeout(proxyUrl, {
       method: 'POST',
       headers: { 
-        'Authorization': `Bearer ${HF_TOKEN}`, 
+        'Authorization': `Bearer ${GROQ_API_KEY}`, 
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload),
@@ -48,19 +53,13 @@ export const askMissionAI = async (userMessage, context = {}, chatHistory = []) 
 
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.error || result.details || 'Signal Lost');
+      throw new Error(result.error?.message || result.error || 'Signal Lost');
     }
     
-    return parseResponse(result);
+    return result.choices[0]?.message?.content || "Mission Control signal weak.";
 
   } catch (error) {
-    if (error.message.includes('Warming up')) throw new Error('Mission AI is warming up (15s). Please retry.');
+    console.error('Groq Proxy Error:', error);
     throw new Error(`AI Link Error: ${error.message}`);
   }
-};
-
-const parseResponse = (result) => {
-  let reply = Array.isArray(result) ? result[0].generated_text : result.generated_text;
-  if (reply.includes('[/INST]')) reply = reply.split('[/INST]').pop().trim();
-  return reply || "Mission Control signal weak.";
 };
