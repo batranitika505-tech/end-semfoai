@@ -19,7 +19,13 @@ export const useISS = (autoRefresh = true) => {
     try {
       const newPos = await getISSLocation();
       
-      // Update coordinates and speed immediately
+      // Handle simulated data warning
+      if (newPos.simulated) {
+        setError('Operating on Simulated Data: Check Network/VPN');
+      } else {
+        setError(null);
+      }
+
       const currentSpeed = newPos.velocity || 27600;
       setSpeed(currentSpeed);
       setLocation(newPos);
